@@ -53,6 +53,7 @@ value *create_expression_value(char *operator, size_t size, ...) {
   select_query*         select_query;
   delete_query*         delete_query;
   drop_series_query*    drop_series_query;
+  list_series_query*    list_series_query;
   drop_query*           drop_query;
   groupby_clause*       groupby_clause;
   table_name_array*     table_name_array;
@@ -75,7 +76,7 @@ value *create_expression_value(char *operator, size_t size, ...) {
 %lex-param   {void *scanner}
 
 // define types of tokens (terminals)
-%token          SELECT DELETE FROM WHERE EQUAL GROUP BY LIMIT ORDER ASC DESC MERGE INNER JOIN AS LIST SERIES INTO CONTINUOUS_QUERIES CONTINUOUS_QUERY DROP DROP_SERIES EXPLAIN
+%token          SELECT DELETE FROM WHERE EQUAL GROUP BY LIMIT ORDER ASC DESC MERGE INNER JOIN AS LIST LIST_SERIES INTO CONTINUOUS_QUERIES CONTINUOUS_QUERY DROP DROP_SERIES EXPLAIN
 %token <string> STRING_VALUE INT_VALUE FLOAT_VALUE BOOLEAN_VALUE TABLE_NAME SIMPLE_NAME INTO_NAME REGEX_OP
 %token <string>  NEGATION_REGEX_OP REGEX_STRING INSENSITIVE_REGEX_STRING DURATION
 
@@ -89,6 +90,7 @@ value *create_expression_value(char *operator, size_t size, ...) {
 // define the types of the non-terminals
 %type <from_clause>       FROM_CLAUSE
 %type <condition>         WHERE_CLAUSE
+%type <like_clause>       LIKE_CLAUSE
 %type <value_array>       COLUMN_NAMES
 %type <string>            BOOL_OPERATION ALIAS_CLAUSE
 %type <condition>         CONDITION
@@ -105,6 +107,7 @@ value *create_expression_value(char *operator, size_t size, ...) {
 %type <query>             QUERY
 %type <delete_query>      DELETE_QUERY
 %type <drop_series_query> DROP_SERIES_QUERY
+%type <list_series_query> LIST_SERIES_QUERY
 %type <select_query>      SELECT_QUERY
 %type <drop_query>        DROP_QUERY
 %type <select_query>      EXPLAIN_QUERY
@@ -162,10 +165,10 @@ QUERY:
           $$->drop_query = $1;
         }
         |
-        LIST SERIES
+        LIST_SERIES_QUERY
         {
           $$ = calloc(1, sizeof(query));
-          $$->list_series_query = TRUE;
+          $$->list_series_query = $1;
         }
         |
         DROP_SERIES_QUERY
@@ -206,6 +209,14 @@ DROP_SERIES_QUERY:
         DROP_SERIES SIMPLE_TABLE_VALUE
         {
           $$ = malloc(sizeof(drop_series_query));
+          $$->name = $2;
+        }
+
+LIST_SERIES_QUERY:
+        LIST_SERIES
+        LIST_SERIES LIKE_CLAUSE
+        {
+          $$ = malloc(sizeof(list_series_query));
           $$->name = $2;
         }
 
@@ -351,6 +362,19 @@ ALIAS_CLAUSE:
         {
           $$ = NULL;
         }
+
+LIKE_CLAUSE:
+{
+        'LIKE' REGEX_STRING
+        {
+          $$ = create_value($1, VALUE_REGEX, FALSE, NULL);
+        }
+        |
+        'LIKE' INSENSITIVE_REGEX_STRING
+        {
+          $$ = create_value($1, VALUE_REGEX, TRUE, NULL);
+        }
+}
 
 FROM_CLAUSE:
         FROM TABLE_VALUE

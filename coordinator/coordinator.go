@@ -173,11 +173,16 @@ func (self *CoordinatorImpl) runListSeriesQuery(querySpec *parser.QuerySpec, ser
 	series := self.clusterConfiguration.MetaStore.GetSeriesForDatabase(querySpec.Database())
 	name := "list_series_result"
 	fields := []string{"name"}
-	points := make([]*protocol.Point, len(series), len(series))
+	points := make([]*protocol.Point, 0, len(series))
+	r, _ := regexp.Compile("some regex")
 
-	for i, s := range series {
-		fieldValues := []*protocol.FieldValue{{StringValue: proto.String(s)}}
-		points[i] = &protocol.Point{Values: fieldValues}
+	for _, s := range series {
+		if !r.MatchString(s) {
+			continue
+		}
+		name := proto.String(s)
+		fieldValues := []*protocol.FieldValue{{StringValue: name}}
+		points = append(points, &protocol.Point{Values: fieldValues})
 	}
 
 	seriesResult := &protocol.Series{Name: &name, Fields: fields, Points: points}
