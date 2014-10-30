@@ -100,7 +100,7 @@ type LocalShardStore interface {
 	BufferWrite(request *p.Request)
 	GetOrCreateShard(id uint32) (LocalShardDb, error)
 	ReturnShard(id uint32)
-	DeleteShard(shardId uint32) error
+	DeleteShard(shardId uint32)
 }
 
 func (self *ShardData) Id() uint32 {
@@ -238,7 +238,7 @@ func (self *ShardData) getProcessor(querySpec *parser.QuerySpec, processor engin
 	// We should aggregate at the shard level
 	if self.ShouldAggregateLocally(querySpec) {
 		log.Debug("creating a query engine")
-		processor, err = engine.NewQueryEngine(processor, query)
+		processor, err = engine.NewQueryEngine(processor, query, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -300,6 +300,8 @@ func (self *ShardData) Query(querySpec *parser.QuerySpec, response chan<- *p.Res
 		var processor engine.Processor = NewResponseChannelProcessor(NewResponseChannelWrapper(response))
 		var err error
 
+		processor = NewShardIdInserterProcessor(self.Id(), processor)
+
 		processor, err = self.getProcessor(querySpec, processor)
 		if err != nil {
 			response <- &p.Response{
@@ -309,7 +311,6 @@ func (self *ShardData) Query(querySpec *parser.QuerySpec, response chan<- *p.Res
 			log.Error("Error while creating engine: %s", err)
 			return
 		}
-
 		shard, err := self.store.GetOrCreateShard(self.id)
 		if err != nil {
 			response <- &p.Response{
@@ -320,6 +321,9 @@ func (self *ShardData) Query(querySpec *parser.QuerySpec, response chan<- *p.Res
 			return
 		}
 		defer self.store.ReturnShard(self.id)
+
+		log.Info("Processor chain:  %s\n", engine.ProcessorChain(processor))
+
 		err = shard.Query(querySpec, processor)
 		// if we call Close() in case of an error it will mask the error
 		if err != nil {
@@ -395,7 +399,7 @@ func (self *ShardData) ShouldAggregateLocally(querySpec *parser.QuerySpec) bool 
 		}
 		return true
 	}
-	return self.shardDuration%*groupByInterval == 0
+	return (self.shardDuration%*groupByInterval == 0) && !querySpec.GroupByIrregularInterval
 }
 
 type Shards []*ShardData

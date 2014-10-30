@@ -71,9 +71,18 @@ type ApiConfig struct {
 
 type GraphiteConfig struct {
 	Enabled    bool
+	Address    string
 	Port       int
 	Database   string
 	UdpEnabled bool `toml:"udp_enabled"`
+}
+
+type CollectdInputConfig struct {
+	Enabled  bool
+	Address  string
+	Port     int
+	Database string
+	TypesDB  string `toml:"typesdb"`
 }
 
 type UdpInputConfig struct {
@@ -136,9 +145,10 @@ type WalConfig struct {
 }
 
 type InputPlugins struct {
-	Graphite        GraphiteConfig   `toml:"graphite"`
-	UdpInput        UdpInputConfig   `toml:"udp"`
-	UdpServersInput []UdpInputConfig `toml:"udp_servers"`
+	Graphite        GraphiteConfig      `toml:"graphite"`
+	CollectdInput   CollectdInputConfig `toml:"collectd"`
+	UdpInput        UdpInputConfig      `toml:"udp"`
+	UdpServersInput []UdpInputConfig    `toml:"udp_servers"`
 }
 
 type TomlConfiguration struct {
@@ -158,16 +168,22 @@ type TomlConfiguration struct {
 
 type Configuration struct {
 	AdminHttpPort   int
-	AdminAssetsDir  string
 	ApiHttpSslPort  int
 	ApiHttpCertPath string
 	ApiHttpPort     int
 	ApiReadTimeout  time.Duration
 
 	GraphiteEnabled    bool
+	GraphiteAddress    string
 	GraphitePort       int
 	GraphiteDatabase   string
 	GraphiteUdpEnabled bool
+
+	CollectdEnabled  bool
+	CollectdAddress  string
+	CollectdPort     int
+	CollectdDatabase string
+	CollectdTypesDB  string
 
 	UdpServers []UdpInputConfig
 
@@ -298,16 +314,22 @@ func parseTomlConfiguration(filename string) (*Configuration, error) {
 
 	config := &Configuration{
 		AdminHttpPort:   tomlConfiguration.Admin.Port,
-		AdminAssetsDir:  tomlConfiguration.Admin.Assets,
 		ApiHttpPort:     tomlConfiguration.HttpApi.Port,
 		ApiHttpCertPath: tomlConfiguration.HttpApi.SslCertPath,
 		ApiHttpSslPort:  tomlConfiguration.HttpApi.SslPort,
 		ApiReadTimeout:  apiReadTimeout,
 
 		GraphiteEnabled:    tomlConfiguration.InputPlugins.Graphite.Enabled,
+		GraphiteAddress:    tomlConfiguration.InputPlugins.Graphite.Address,
 		GraphitePort:       tomlConfiguration.InputPlugins.Graphite.Port,
 		GraphiteDatabase:   tomlConfiguration.InputPlugins.Graphite.Database,
 		GraphiteUdpEnabled: tomlConfiguration.InputPlugins.Graphite.UdpEnabled,
+
+		CollectdEnabled:  tomlConfiguration.InputPlugins.CollectdInput.Enabled,
+		CollectdAddress:  tomlConfiguration.InputPlugins.CollectdInput.Address,
+		CollectdPort:     tomlConfiguration.InputPlugins.CollectdInput.Port,
+		CollectdDatabase: tomlConfiguration.InputPlugins.CollectdInput.Database,
+		CollectdTypesDB:  tomlConfiguration.InputPlugins.CollectdInput.TypesDB,
 
 		UdpServers: tomlConfiguration.InputPlugins.UdpServersInput,
 
@@ -406,12 +428,28 @@ func (self *Configuration) ApiHttpSslPortString() string {
 	return fmt.Sprintf("%s:%d", self.BindAddress, self.ApiHttpSslPort)
 }
 
-func (self *Configuration) GraphitePortString() string {
+func (self *Configuration) GraphiteBindString() string {
 	if self.GraphitePort <= 0 {
 		return ""
 	}
 
-	return fmt.Sprintf("%s:%d", self.BindAddress, self.GraphitePort)
+	if self.GraphiteAddress != "" {
+		return fmt.Sprintf("%s:%d", self.GraphiteAddress, self.GraphitePort)
+	} else {
+		return fmt.Sprintf("%s:%d", self.BindAddress, self.GraphitePort)
+	}
+}
+
+func (self *Configuration) CollectdBindString() string {
+	if self.CollectdPort <= 0 {
+		return ""
+	}
+
+	if self.CollectdAddress != "" {
+		return fmt.Sprintf("%s:%d", self.CollectdAddress, self.CollectdPort)
+	} else {
+		return fmt.Sprintf("%s:%d", self.BindAddress, self.CollectdPort)
+	}
 }
 
 func (self *Configuration) UdpInputPortString(port int) string {

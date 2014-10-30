@@ -47,7 +47,6 @@ type HttpServer struct {
 func NewHttpServer(config *configuration.Configuration, theCoordinator api.Coordinator, userManager UserManager, clusterConfig *cluster.ClusterConfiguration, raftServer *coordinator.RaftServer) *HttpServer {
 	self := &HttpServer{}
 	self.httpPort = config.ApiHttpPortString()
-	self.adminAssetsDir = config.AdminAssetsDir
 	self.coordinator = theCoordinator
 	self.userManager = userManager
 	self.shutdown = make(chan bool, 2)
@@ -578,6 +577,7 @@ func (self *HttpServer) tryAsClusterAdmin(w libhttp.ResponseWriter, r *libhttp.R
 
 	if username == "" {
 		w.Header().Add("WWW-Authenticate", "Basic realm=\"influxdb\"")
+		w.Header().Add("Content-Type", "text/plain")
 		w.WriteHeader(libhttp.StatusUnauthorized)
 		w.Write([]byte(INVALID_CREDENTIALS_MSG))
 		return
@@ -586,6 +586,7 @@ func (self *HttpServer) tryAsClusterAdmin(w libhttp.ResponseWriter, r *libhttp.R
 	user, err := self.userManager.AuthenticateClusterAdmin(username, password)
 	if err != nil {
 		w.Header().Add("WWW-Authenticate", "Basic realm=\"influxdb\"")
+		w.Header().Add("Content-Type", "text/plain")
 		w.WriteHeader(libhttp.StatusUnauthorized)
 		w.Write([]byte(err.Error()))
 		return

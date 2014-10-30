@@ -413,7 +413,7 @@ func (self *SingleServerSuite) TestUserWritePermissions(c *C) {
 	// if this test ran by itself there will be no shards to query,
 	// therefore no error will be returned
 	if err != nil {
-		c.Assert(err, ErrorMatches, ".*Couldn't look up.*")
+		c.Assert(err, ErrorMatches, ".*Couldn't find series.*")
 	} else {
 		c.Assert(actualSeries, HasLen, 0)
 	}
@@ -581,16 +581,34 @@ func (self *SingleServerSuite) TestDataResurrectionAfterRestart(c *C) {
 	c.Assert(self.server.Start(), IsNil)
 	self.server.WaitForServerToStart()
 	error, _ := self.server.GetErrorBody("db1", "select count(column0) from data_resurrection", "user", "pass", true, c)
-	c.Assert(error, Matches, ".*Couldn't look up.*")
+	c.Assert(error, Matches, ".*Couldn't find series.*")
 	series = self.server.RunQuery("list series", "s", c)
 	c.Assert(series, HasLen, 1)
 	c.Assert(series[0].Points, HasLen, 0)
 }
 
+func (self *SingleServerSuite) TestEmptyResponseWhenNoShardsMatchQuery(c *C) {
+	data := `
+    [
+      {
+        "points": [
+            [1]
+        ],
+        "name": "test_should_write",
+        "columns": ["value"]
+      }
+    ]`
+
+	self.server.WriteData(data, c)
+
+	failingContent := self.server.RunQueryAsRoot("select * from test_should_write where time > '1990-12-01' and time < '1990-12-12'", "m", c)
+	c.Assert(failingContent, HasLen, 0)
+}
+
 // issue https://github.com/influxdb/influxdb/issues/702. Dropping shards can cause server crash
 // Two cases here. First is they try to drop the same shard multiple times. Second is that
 // they drop a shard and the server gets restarted so the raft log replays and tries to drop it again.
-func (self *SingleServerSuite) TestDropingShardBeforeRestart(c *C) {
+func (self *SingleServerSuite) TestDroppingShardBeforeRestart(c *C) {
 	s := CreatePoints("data_resurrection", 1, 1)
 	self.server.WriteData(s, c)
 	self.server.WaitForServerToSync()
@@ -741,7 +759,7 @@ func (self *SingleServerSuite) TestDbDelete(c *C) {
 	self.createUser(c)
 	// this shouldn't return any data
 	error, _ := self.server.GetErrorBody("db1", "select val1 from test_deletetions", "root", "root", true, c)
-	c.Assert(error, Matches, ".*Couldn't look up.*")
+	c.Assert(error, Matches, ".*Couldn't find series.*")
 }
 
 // test delete query
@@ -765,6 +783,7 @@ func (self *SingleServerSuite) TestDeleteQuery(c *C) {
 ]`, c)
 		data := self.server.RunQuery("select val1 from test_delete_query", "m", c)
 		c.Assert(data, HasLen, 1)
+		c.Assert(data[0].Points, HasLen, 1)
 
 		_ = self.server.RunQuery(queryString, "m", c)
 
