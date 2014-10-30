@@ -491,7 +491,7 @@ func serializeSingleSeries(series *protocol.Series, precision TimePrecision, pre
 	if pretty {
 		return json.MarshalIndent(SerializeSeries(arg, precision)[0], "", JSON_PRETTY_PRINT_INDENT)
 	} else {
-		return json.Marshal(SerializeSeries(arg, precision)[0])
+		return SerializeSeriesJson(arg, precision, 1), nil
 	}
 }
 
@@ -499,7 +499,7 @@ func serializeMultipleSeries(series map[string]*protocol.Series, precision TimeP
 	if pretty {
 		return json.MarshalIndent(SerializeSeries(series, precision), "", JSON_PRETTY_PRINT_INDENT)
 	} else {
-		return json.Marshal(SerializeSeries(series, precision))
+		return SerializeSeriesJson(series, precision, 0), nil
 	}
 }
 

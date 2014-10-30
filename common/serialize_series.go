@@ -1,8 +1,10 @@
 package common
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	log "code.google.com/p/log4go"
 	"github.com/influxdb/influxdb/protocol"
@@ -221,6 +223,119 @@ func SerializeSeries(memSeries map[string]*protocol.Series, precision TimePrecis
 			Points:  points,
 		})
 	}
-	SortSerializedSeries(serializedSeries)
+
+	//	SortSerializedSeries(serializedSeries)
 	return serializedSeries
+}
+
+func SerializeSeriesJson(memSeries map[string]*protocol.Series, precision TimePrecision, numberOfSeries uint64) []byte {
+	var (
+		buf               bytes.Buffer
+		memSeriesFirstRun bool
+		pointsFirstRun    bool
+		cnt               uint64
+	)
+	cnt = 0
+	buf.Grow(128 * 1024)
+	if numberOfSeries != 1 {
+		buf.WriteString("[")
+	}
+
+	memSeriesFirstRun = true
+	for _, series := range memSeries {
+		cnt++
+		if !memSeriesFirstRun {
+			buf.WriteString(",")
+		} else {
+			memSeriesFirstRun = false
+		}
+		buf.WriteString("{\"name\":\"")
+		buf.WriteString(*series.Name)
+		buf.WriteString("\",\"columns\":[")
+		pointsFirstRun = true
+
+		includeSequenceNumber := true
+		if len(series.Points) > 0 && series.Points[0].SequenceNumber == nil {
+			includeSequenceNumber = false
+		}
+
+		buf.WriteString("\"time\"")
+		if includeSequenceNumber {
+			buf.WriteString(",\"sequence_number\"")
+		}
+		for _, field := range series.Fields {
+			buf.WriteString(",\"")
+			buf.WriteString(field)
+			buf.WriteString("\"")
+		}
+		buf.WriteString("],\"points\":[")
+
+		for _, row := range series.Points {
+			if !pointsFirstRun {
+				buf.WriteString(",")
+			} else {
+				pointsFirstRun = false
+			}
+			buf.WriteString("[")
+			timestamp := int64(0)
+			if t := row.Timestamp; t != nil {
+				timestamp = *row.GetTimestampInMicroseconds()
+				switch precision {
+				case SecondPrecision:
+					timestamp /= 1000
+					fallthrough
+				case MillisecondPrecision:
+					timestamp /= 1000
+				}
+			}
+
+			buf.WriteString(strconv.FormatInt(timestamp, 10))
+			s := uint64(0)
+			if includeSequenceNumber {
+				if row.SequenceNumber != nil {
+					s = row.GetSequenceNumber()
+				}
+				buf.WriteString(",")
+				buf.WriteString(strconv.FormatUint(s, 10))
+			}
+
+			for _, value := range row.Values {
+				buf.WriteString(",")
+
+				if value == nil {
+					buf.WriteString("null")
+					continue
+				}
+				_, ok := value.GetValue()
+				if !ok {
+					buf.WriteString("null")
+					log.Warn("Infinite or NaN value encountered")
+					continue
+				}
+
+				if value.StringValue != nil {
+					buf.WriteString("\"")
+					buf.WriteString(*value.StringValue)
+					buf.WriteString("\"")
+				} else if value.DoubleValue != nil {
+					buf.WriteString(strconv.FormatFloat(*value.DoubleValue, 'f', 6, 64))
+				} else if value.Int64Value != nil {
+					buf.WriteString(strconv.FormatInt(*value.Int64Value, 10))
+				} else {
+					buf.WriteString("null")
+				}
+			}
+			buf.WriteString("]")
+		}
+
+		buf.WriteString("]}")
+		if numberOfSeries > 0 && cnt > numberOfSeries {
+			break
+		}
+	}
+	if numberOfSeries != 1 {
+		buf.WriteString("]")
+	}
+
+	return buf.Bytes()
 }
