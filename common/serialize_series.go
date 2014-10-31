@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	log "code.google.com/p/log4go"
 	"github.com/influxdb/influxdb/protocol"
@@ -314,7 +315,9 @@ func SerializeSeriesJson(memSeries map[string]*protocol.Series, precision TimePr
 				}
 
 				if value.StringValue != nil {
-					buf.WriteString(strconv.Quote(*value.StringValue))
+					buf.WriteString("\"")
+					buf.WriteString(strings.Replace(*value.StringValue, "\\", "\\\\", -1))
+					buf.WriteString("\"")
 				} else if value.DoubleValue != nil {
 					buf.WriteString(strconv.FormatFloat(*value.DoubleValue, 'f', 6, 64))
 				} else if value.Int64Value != nil {
